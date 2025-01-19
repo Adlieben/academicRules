@@ -1,4 +1,5 @@
 url: https://adlieben.github.io/academicRules/
 template:
   bootstrap: 5
+favicon: "man/figures/logo.png"
 
