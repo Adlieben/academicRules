@@ -28,6 +28,7 @@
 #'   containing the results of applying the modified ruleset.
 #'
 #' @seealso \code{\link{apply_rules}} for applying a ruleset directly.
+#' @export
 #'
 #' @examples
 #' # Example: raising a minimum threshold and removing a logical rule (based on IBDP passing criteria)
