@@ -1,106 +1,80 @@
-#' Explain how each row (student) was classified according to the rules
+#' Explain how each row was classified according to the rules
 #'
 #' @description
-#' Shows whether each rule was triggered or not, and how the final classification
-#' was reached.
+#' For each row, indicates whether each rule triggered a fail or not, and shows the final outcome.
 #'
-#' @param data A data frame or tibble that has already been classified (i.e.,
-#'   it has a column with final outcomes).
+#' @param data A data frame that was already classified by \code{\link{apply_rules}}, i.e.,
+#'   it has a final outcome column.
 #' @param ruleset An object of class "academic_ruleset".
-#' @param outcome_col_name Character. The name of the classification column in `data`.
+#' @param outcome_col_name The name of the classification column in \code{data} (e.g. "OUTCOME").
 #'
-#' @return A list (or data frame) detailing which rules were triggered for each row.
+#' @return A list of length \code{nrow(data)}, where each element has:
+#'   \itemize{
+#'     \item \code{index}: row index
+#'     \item \code{final_classification}: the final classification (PASS or FAIL, etc.)
+#'     \item \code{rules_evaluation}: a list of texts describing whether each rule was triggered
+#'   }
 #' @export
 #'
 #' @examples
-#' # Using the previous example:
-#' df <- data.frame(
-#'   student_id = 1:5,
-#'   total_score = c(26, 23, 30, 10, 29),
-#'   fail_count = c(0, 1, 2, 3, 1),
-#'   essay_grade = c(3, 2, 1, 0, 4)
-#' )
-#' my_rules <- define_rule_set(
-#'   list(
-#'     "fail_too_many" = list(type = "threshold", value = 2, dimension = "fail_count"),
-#'     "min_total" = list(type = "threshold", value = 24, dimension = "total_score"),
-#'     "pass_essay" = list(type = "logical", expr = ~ essay_grade >= 2)
-#'   ),
-#'   default_outcome = "PASS"
-#' )
+#' df <- data.frame(id=1:2, score=c(60,45), fails=c(0,3))
+#' rs <- define_rule_set(list(
+#'   min_score = list(type="minimum", value=50, dimension="score"),
+#'   max_fails = list(type="maximum", value=2, dimension="fails")
+#' ))
 #'
-#' df_classified <- apply_rules(df, my_rules, outcome_col_name = "OUTCOME")
-#' explain_classification(df_classified, my_rules, "OUTCOME")
+#' out <- apply_rules(df, rs, "OUTCOME")
+#' explain_classification(out, rs, "OUTCOME")
 explain_classification <- function(data, ruleset, outcome_col_name = "OUTCOME") {
   if (!inherits(ruleset, "academic_ruleset")) {
-    stop("ruleset must be an object of class 'academic_ruleset'.")
+    stop("`ruleset` must be an object of class 'academic_ruleset'.")
   }
   if (!outcome_col_name %in% names(data)) {
-    stop(paste("Column", outcome_col_name, "not found in data."))
+    stop(sprintf("Column '%s' not found in data.", outcome_col_name))
   }
 
   explanations <- vector("list", nrow(data))
 
-  # For each row (student), evaluate each rule and see if it triggered "FAIL"
   for (i in seq_len(nrow(data))) {
     row_info <- data[i, , drop = FALSE]
     row_rules <- list()
 
     for (rule_name in ruleset$rule_priority) {
-      current_rule <- ruleset$rules[[rule_name]]
+      rdef <- ruleset$rules[[rule_name]]
       triggered <- FALSE
 
-      if (current_rule$type == "threshold") {
-        # same threshold logic
-        dim_col <- current_rule$dimension
-        threshold <- current_rule$value
-
-        triggered <- switch(
-          EXPR = dim_col,
-          "total_score" = row_info[[dim_col]] < threshold,
-          "fail_count"  = row_info[[dim_col]] > threshold,
-          # fallback
-          row_info[[dim_col]] < threshold
-        )
-
+      if (rdef$type == "minimum") {
+        dim_col <- rdef$dimension
+        val <- rdef$value
+        triggered <- row_info[[dim_col]] < val
         row_rules[[rule_name]] <- if (triggered) {
-          paste0("Rule '", rule_name, "' triggered: ",
-                 "[", dim_col, "=", row_info[[dim_col]],
-                 "] vs threshold=", threshold)
+          sprintf("Triggered: %s < %s", row_info[[dim_col]], val)
         } else {
-          paste0("Rule '", rule_name, "' not triggered.")
+          sprintf("Not triggered: %s >= %s", row_info[[dim_col]], val)
         }
 
-      } else if (current_rule$type == "logical") {
-        # Same fix as in `apply_rules()`
-        expr_fn  <- current_rule$expr
-        expr_rhs <- expr_fn[[2]]   # The RHS of ~
-
-        # Evaluate for this single row
-        value <- eval(expr_rhs, envir = row_info)
-
-        # `value` should be a single logical if everything is correct
-        # e.g., essay_grade >= 2 => TRUE/FALSE for that row
-        if (!is.logical(value) || length(value) != 1) {
-          stop(
-            sprintf(
-              "Logical rule '%s' did not return a single TRUE/FALSE in row %d.",
-              rule_name, i
-            )
-          )
-        }
-
-        triggered <- !value  # If the expression is not satisfied, consider rule triggered
-
+      } else if (rdef$type == "maximum") {
+        dim_col <- rdef$dimension
+        val <- rdef$value
+        triggered <- row_info[[dim_col]] > val
         row_rules[[rule_name]] <- if (triggered) {
-          paste0("Rule '", rule_name, "' triggered: expression not satisfied.")
+          sprintf("Triggered: %s > %s", row_info[[dim_col]], val)
         } else {
-          paste0("Rule '", rule_name, "' not triggered.")
+          sprintf("Not triggered: %s <= %s", row_info[[dim_col]], val)
         }
 
-      } else {
-        stop(paste("Unknown rule type:", current_rule$type))
+      } else if (rdef$type == "logical") {
+        expr_rhs <- rdef$expr[[2]]
+        val <- eval(expr_rhs, envir=row_info)
+        # triggered if the expression is FALSE/NA
+        triggered <- !isTRUEx(val)
+        row_rules[[rule_name]] <- if (triggered) {
+          "Triggered: logical expression not satisfied"
+        } else {
+          "Not triggered: expression is TRUE"
+        }
       }
+
     }
 
     final_status <- row_info[[outcome_col_name]]
@@ -111,5 +85,5 @@ explain_classification <- function(data, ruleset, outcome_col_name = "OUTCOME") 
     )
   }
 
-  return(explanations)
+  explanations
 }

@@ -1,83 +1,94 @@
-#' Apply defined academic rules to a dataset
+#' Apply academic rules to a data frame
 #'
 #' @description
-#' Evaluates each row in `data` against the rule set defined by `ruleset`.
+#' For each row in \code{data}, evaluates the rules in \code{ruleset} in the specified priority
+#' order. If a rule is triggered, that row's outcome is set to "FAIL" (or equivalent).
+#' If no rules are triggered, the row remains at the default outcome (e.g., "PASS").
 #'
-#' @param data A data frame or tibble. Each row represents a single student's (or entity's) data.
-#' @param ruleset An object of class "academic_ruleset" (from \code{\link{define_rule_set}}).
-#' @param outcome_col_name Character. The name of the new column for classification result.
+#' @param data A data frame or tibble. Each row represents a student or entity.
+#' @param ruleset An object of class "academic_ruleset" from \code{\link{define_rule_set}}.
+#' @param outcome_col_name A character string for the new column's name (e.g. "OUTCOME").
 #'
-#' @return The input data frame with an additional column containing classification outcomes.
+#' @return The original \code{data} with an extra column named \code{outcome_col_name}.
 #' @export
 #'
 #' @examples
-#' # Example dataset
 #' df <- data.frame(
-#'   student_id = 1:5,
-#'   total_score = c(26, 23, 30, 10, 29),
-#'   fail_count = c(0, 1, 2, 3, 1),
-#'   essay_grade = c(3, 2, 1, 0, 4)
+#'   id = 1:4,
+#'   score = c(60, 49, 70, 50),
+#'   fails = c(0, 1, 3, 2)
 #' )
 #'
-#' my_rules <- define_rule_set(
-#'   list(
-#'     "fail_too_many" = list(type = "threshold", value = 2, dimension = "fail_count"),
-#'     "min_total"     = list(type = "threshold", value = 24, dimension = "total_score"),
-#'     "pass_essay"    = list(type = "logical",   expr = ~ essay_grade >= 2)
-#'   ),
-#'   default_outcome = "PASS"
-#' )
+#' rs <- define_rule_set(list(
+#'   "min_score" = list(type = "minimum", value = 50, dimension = "score"),
+#'   "max_fails" = list(type = "maximum", value = 2, dimension = "fails")
+#' ))
 #'
-#' apply_rules(df, my_rules)
+#' out <- apply_rules(df, rs, "RESULT")
+#' out
 apply_rules <- function(data, ruleset, outcome_col_name = "OUTCOME") {
   if (!inherits(ruleset, "academic_ruleset")) {
-    stop("ruleset must be an object of class 'academic_ruleset'.")
+    stop("`ruleset` must be an object of class 'academic_ruleset'.")
   }
 
-  # Initialize outcome with the default
+  # Initialize the outcome with the default
   data[[outcome_col_name]] <- ruleset$default_outcome
 
-  # Evaluate each rule in the specified priority order
+  # Apply each rule in order
   for (rule_name in ruleset$rule_priority) {
-    current_rule <- ruleset$rules[[rule_name]]
+    rule <- ruleset$rules[[rule_name]]
 
-    if (is.null(current_rule$type)) {
-      stop(paste("Rule", rule_name, "does not have a 'type' element."))
-    }
-
-    # Evaluate threshold-based rule
-    if (current_rule$type == "threshold") {
-      dim_col <- current_rule$dimension
-      threshold <- current_rule$value
-
+    # Distinguish the three rule types
+    if (rule$type == "minimum") {
+      dim_col <- rule$dimension
+      val <- rule$value
+      # Must exist in data
       if (!dim_col %in% names(data)) {
-        stop(paste("Column", dim_col, "not found in data."))
+        stop(sprintf("Column '%s' not found in data for rule '%s'.",
+                     dim_col, rule_name))
       }
+      # Fail if data[dim_col] < val
+      fail_rows <- which(data[[dim_col]] < val)
+      data[[outcome_col_name]][fail_rows] <- "FAIL"
 
-      failing_indices <- switch(
-        EXPR = dim_col,
-        "total_score" = which(data[[dim_col]] < threshold),
-        "fail_count"  = which(data[[dim_col]] > threshold),
-        which(data[[dim_col]] < threshold)
-      )
+    } else if (rule$type == "maximum") {
+      dim_col <- rule$dimension
+      val <- rule$value
+      if (!dim_col %in% names(data)) {
+        stop(sprintf("Column '%s' not found in data for rule '%s'.",
+                     dim_col, rule_name))
+      }
+      # Fail if data[dim_col] > val
+      fail_rows <- which(data[[dim_col]] > val)
+      data[[outcome_col_name]][fail_rows] <- "FAIL"
 
-      data[[outcome_col_name]][failing_indices] <- "FAIL"
-    } else if (current_rule$type == "logical") {
-      # Evaluate the formula in the context of 'data'
-      expr_fn <- current_rule$expr
-      expr_rhs <- expr_fn[[2]]  # This is the actual expression on the RHS of ~
-
-      # Evaluate to get a logical vector
+    } else if (rule$type == "logical") {
+      expr_fn <- rule$expr
+      # Evaluate the formula's RHS in the context of the entire data
+      expr_rhs <- expr_fn[[2]]
       result_vec <- eval(expr_rhs, envir = data)
-
-      # Mark rows that do NOT satisfy the condition as "FAIL"
-      failing_indices <- which(!result_vec)
-      data[[outcome_col_name]][failing_indices] <- "FAIL"
+      # If it's not logical or has any NAs, decide how to handle:
+      # For simplicity, let's treat NA as fail => we check !TRUE
+      fail_rows <- which(!isTRUEx(result_vec))
+      data[[outcome_col_name]][fail_rows] <- "FAIL"
 
     } else {
-      stop(paste("Unknown rule type:", current_rule$type))
+      stop(sprintf("Unknown rule type '%s' for rule '%s'.", rule$type, rule_name))
     }
   }
 
-  return(data)
+  data
+}
+
+# Helper function to handle isTRUE for vectors (treat NA as fail)
+isTRUEx <- function(x) {
+  # Return TRUE if and only if x is TRUE.
+  # Return FALSE if x is FALSE or NA
+  if (is.logical(x)) {
+    # Replace NA with FALSE
+    x[is.na(x)] <- FALSE
+    x
+  } else {
+    rep(FALSE, length(x))
+  }
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/define_rule_set.R
 \name{define_rule_set}
 \alias{define_rule_set}
-\title{Define a set of academic rules for classification}
+\title{Define a set of academic rules (minimum, maximum, or logical)}
 \usage{
 define_rule_set(
   rules_list = list(),
@@ -11,32 +11,44 @@ define_rule_set(
 )
 }
 \arguments{
-\item{rules_list}{A named list or vector describing each rule. E.g.,
-list(
-"min_total" = list(type = "threshold", value = 24),
-"max_fails" = list(type = "threshold", value = 1, dimension = "fail_count")
-)}
+\item{rules_list}{A named list of rules. Each element has:
+\describe{
+\item{\code{type}}{Either "minimum", "maximum", or "logical".}
+\item{\code{value}}{(For "minimum" or "maximum") A numeric value to compare against.}
+\item{\code{dimension}}{(For "minimum" or "maximum") The name of a numeric column in the data.}
+\item{\code{expr}}{(For "logical") A formula like \code{~ expression}, evaluated row-wise.}
+}}
 
-\item{default_outcome}{Character. The classification assigned if no rules are
-triggered (e.g., "PASS").}
+\item{default_outcome}{Character string giving the outcome to assign if none of the rules
+are triggered for a row (e.g., "PASS").}
 
-\item{rule_priority}{A character vector indicating the order in which rules
-should be checked (optional).}
+\item{rule_priority}{A character vector giving the order in which rules are applied.
+If \code{NULL}, the order is simply the names in \code{rules_list}.}
 }
 \value{
-A list containing all the relevant rules and parameters.
+An object of class \code{"academic_ruleset"}, which is essentially a list with
+\itemize{
+\item \code{rules}: the \code{rules_list}
+\item \code{default_outcome}: the default outcome
+\item \code{rule_priority}: the order of rule application
+}
 }
 \description{
-Creates a list (or other structure) of user-specified pass/fail or multi-category
-rules. Each "rule" can be a named function, expression, or threshold that will be
-applied to a student's record.
+Creates and returns an object of class "academic_ruleset", containing one or more rules.
+Each rule can be of type:
+\itemize{
+\item "minimum": Fail if a column is below a specified value.
+\item "maximum": Fail if a column is above a specified value.
+\item "logical": Fail if a row-wise logical expression evaluates to FALSE.
+}
 }
 \examples{
+# A simple set of rules
 my_rules <- define_rule_set(
   rules_list = list(
-    "min_total" = list(type = "threshold", value = 24, dimension = "total_score"),
-    "max_fails" = list(type = "threshold", value = 2, dimension = "fail_count"),
-    "must_pass_essay" = list(type = "logical", expr = ~ essay_grade >= 2)
+    "min_score" = list(type = "minimum", value = 50, dimension = "test_score"),
+    "too_many_fails" = list(type = "maximum", value = 2, dimension = "fail_count"),
+    "final_check" = list(type = "logical", expr = ~ subject_grade != "N")
   ),
   default_outcome = "PASS"
 )
