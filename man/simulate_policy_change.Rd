@@ -2,7 +2,7 @@
 % Please edit documentation in R/simulate_policy_change.R
 \name{simulate_policy_change}
 \alias{simulate_policy_change}
-\title{Simulate a policy change by modifying one or more rules and re-evaluating}
+\title{Simulate a policy change by modifying or removing rules}
 \usage{
 simulate_policy_change(
   data,
@@ -12,41 +12,63 @@ simulate_policy_change(
 )
 }
 \arguments{
-\item{data}{A data frame or tibble with student/entity data.}
+\item{data}{A data frame or tibble containing student/entity data.}
 
-\item{ruleset}{An object of class "academic_ruleset".}
+\item{ruleset}{An object of class \code{academic_ruleset} from
+\code{\link{define_rule_set}}.}
 
-\item{modifications}{A named list, where each name is a rule in \code{ruleset},
-and the value is another list specifying which fields to change. For example:
-\code{list(min_total = list(value = 26))} to change the \code{value} for
-rule \code{min_total}.}
+\item{modifications}{A named list of modifications. Each name must match a rule
+in \code{ruleset}. The value is either:
+\itemize{
+\item A list of fields to change (e.g., \code{list(value=26)}),
+\item \code{NULL}, indicating that the rule should be removed entirely.
+}}
 
-\item{outcome_col_name}{The name of the new outcome column to use.}
+\item{outcome_col_name}{A string for the new outcome column (e.g. \code{"OUTCOME_CHANGED"}).}
 }
 \value{
-A data frame (same as \code{data}) but with an additional
-\code{outcome_col_name} column representing the newly evaluated results.
+A copy of \code{data} with a new column \code{outcome_col_name}
+containing the results of applying the modified ruleset.
 }
 \description{
-Creates a temporary copy of the ruleset with one or more changed values
-(for example, raising a "minimum" cutoff from 24 to 26), applies it to the dataset,
-and returns the newly classified data.
+Creates a temporary copy of the ruleset, applies your requested modifications
+(e.g., changing the \code{value} for a rule or removing a rule entirely), and
+then applies the updated ruleset to the dataset to get a new outcome column.
+}
+\details{
+\itemize{
+\item \strong{Modifying a rule}: Provide a named list of fields to change, e.g.,
+\code{list(minimum_score = list(value=26))} will set \code{rules$minimum_score$value = 26}.
+\item \strong{Removing a rule}: Provide \code{NULL} instead of a list for the rule, e.g.
+\code{list(cas_requirement = NULL)}. This completely removes the rule from
+the ruleset (and from \code{rule_priority}).
+}
 }
 \examples{
-df <- data.frame(score=c(30,25,20,10), fails=c(0,1,3,2))
-rs <- define_rule_set(list(
-  min_score = list(type="minimum", value=24, dimension="score"),
-  max_fails = list(type="maximum", value=2, dimension="fails")
-))
+# Example: raising a minimum threshold and removing a logical rule (based on IBDP passing criteria)
+df <- data.frame(score = c(24,25,30), CAS_met = c(FALSE, TRUE, TRUE))
 
-# Baseline
-baseline <- apply_rules(df, rs, "OUTCOME_BASE")
-
-# Raise min_score from 24 to 26
-changed <- simulate_policy_change(df, rs,
-  modifications = list(min_score = list(value=26)),
-  outcome_col_name = "OUTCOME_NEW"
+rs <- define_rule_set(
+  list(
+    cas_rule = list(type = "logical", expr = ~ CAS_met),
+    min_score = list(type = "minimum", value = 24, dimension = "score")
+  ),
+  default_outcome = "PASS"
 )
 
-cbind(baseline, changed["OUTCOME_NEW"])
+# Baseline classification
+baseline <- apply_rules(df, rs, outcome_col_name = "BASE_OUTCOME")
+
+# Now remove 'cas_rule' and raise 'min_score' to 26
+modifications <- list(
+  cas_rule = NULL,             # remove the CAS rule
+  min_score = list(value = 26) # raise threshold from 24 to 26
+)
+
+changed <- simulate_policy_change(df, rs, modifications, "NEW_OUTCOME")
+
+cbind(baseline, changed["NEW_OUTCOME"])
+}
+\seealso{
+\code{\link{apply_rules}} for applying a ruleset directly.
 }

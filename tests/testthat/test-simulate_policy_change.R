@@ -32,3 +32,35 @@ test_that("simulate_policy_change() warns if rule doesn't exist", {
     "Rule 'fake_rule' not found in ruleset; skipping."
   )
 })
+
+test_that("simulate_policy_change() can remove a rule entirely", {
+  df <- data.frame(
+    CAS_met = c(FALSE, TRUE, TRUE),
+    score   = c(24, 25, 28)
+  )
+  # Suppose we have 2 rules: must meet CAS, must have min_score=24
+  rs <- define_rule_set(
+    list(
+      cas_rule   = list(type="logical", expr=~ CAS_met),
+      min_score  = list(type="minimum", value=24, dimension="score")
+    ),
+    default_outcome = "PASS"
+  )
+
+  # Baseline
+  base_outcomes <- apply_rules(df, rs, "BASE_OUTCOME")
+  # Row1 => CAS_met=FALSE => fails
+  # Row2 => PASS
+  # Row3 => PASS
+  expect_equal(base_outcomes$BASE_OUTCOME, c("FAIL","PASS","PASS"))
+
+  # Now remove the CAS rule
+  changed <- simulate_policy_change(
+    data = df,
+    ruleset = rs,
+    modifications = list(cas_rule=NULL),
+    outcome_col_name = "NO_CAS_OUTCOME"
+  )
+  # Without CAS, row1 => min_score=24 => meets the threshold => PASS
+  expect_equal(changed$NO_CAS_OUTCOME, c("PASS","PASS","PASS"))
+})

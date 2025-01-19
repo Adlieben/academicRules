@@ -1,39 +1,58 @@
-#' Simulate a policy change by modifying one or more rules and re-evaluating
+#' Simulate a policy change by modifying or removing rules
 #'
 #' @description
-#' Creates a temporary copy of the ruleset with one or more changed values
-#' (for example, raising a "minimum" cutoff from 24 to 26), applies it to the dataset,
-#' and returns the newly classified data.
+#' Creates a temporary copy of the ruleset, applies your requested modifications
+#' (e.g., changing the \code{value} for a rule or removing a rule entirely), and
+#' then applies the updated ruleset to the dataset to get a new outcome column.
 #'
-#' @param data A data frame or tibble with student/entity data.
-#' @param ruleset An object of class "academic_ruleset".
-#' @param modifications A named list, where each name is a rule in \code{ruleset},
-#'   and the value is another list specifying which fields to change. For example:
-#'   \code{list(min_total = list(value = 26))} to change the \code{value} for
-#'   rule \code{min_total}.
-#' @param outcome_col_name The name of the new outcome column to use.
+#' @details
+#' - **Modifying a rule**: Provide a named list of fields to change, e.g.,
+#'   \code{list(minimum_score = list(value=26))} will set \code{rules$minimum_score$value = 26}.
 #'
-#' @return A data frame (same as \code{data}) but with an additional
-#'   \code{outcome_col_name} column representing the newly evaluated results.
-#' @export
+#' - **Removing a rule**: Provide \code{NULL} instead of a list for the rule, e.g.
+#'   \code{list(cas_requirement = NULL)}. This completely removes the rule from
+#'   the ruleset (and from \code{rule_priority}).
+#'
+#' @param data A data frame or tibble containing student/entity data.
+#' @param ruleset An object of class \code{academic_ruleset} from
+#'   \code{\link{define_rule_set}}.
+#' @param modifications A named list of modifications. Each name must match a rule
+#'   in \code{ruleset}. The value is either:
+#'   \itemize{
+#'     \item A list of fields to change (e.g., \code{list(value=26)}),
+#'     \item \code{NULL}, indicating that the rule should be removed entirely.
+#'   }
+#' @param outcome_col_name A string for the new outcome column (e.g. \code{"OUTCOME_CHANGED"}).
+#'
+#' @return A copy of \code{data} with a new column \code{outcome_col_name}
+#'   containing the results of applying the modified ruleset.
+#'
+#' @seealso \code{\link{apply_rules}} for applying a ruleset directly.
 #'
 #' @examples
-#' df <- data.frame(score=c(30,25,20,10), fails=c(0,1,3,2))
-#' rs <- define_rule_set(list(
-#'   min_score = list(type="minimum", value=24, dimension="score"),
-#'   max_fails = list(type="maximum", value=2, dimension="fails")
-#' ))
+#' # Example: raising a minimum threshold and removing a logical rule (based on IBDP passing criteria)
+#' df <- data.frame(score = c(24,25,30), CAS_met = c(FALSE, TRUE, TRUE))
 #'
-#' # Baseline
-#' baseline <- apply_rules(df, rs, "OUTCOME_BASE")
-#'
-#' # Raise min_score from 24 to 26
-#' changed <- simulate_policy_change(df, rs,
-#'   modifications = list(min_score = list(value=26)),
-#'   outcome_col_name = "OUTCOME_NEW"
+#' rs <- define_rule_set(
+#'   list(
+#'     cas_rule = list(type = "logical", expr = ~ CAS_met),
+#'     min_score = list(type = "minimum", value = 24, dimension = "score")
+#'   ),
+#'   default_outcome = "PASS"
 #' )
 #'
-#' cbind(baseline, changed["OUTCOME_NEW"])
+#' # Baseline classification
+#' baseline <- apply_rules(df, rs, outcome_col_name = "BASE_OUTCOME")
+#'
+#' # Now remove 'cas_rule' and raise 'min_score' to 26
+#' modifications <- list(
+#'   cas_rule = NULL,             # remove the CAS rule
+#'   min_score = list(value = 26) # raise threshold from 24 to 26
+#' )
+#'
+#' changed <- simulate_policy_change(df, rs, modifications, "NEW_OUTCOME")
+#'
+#' cbind(baseline, changed["NEW_OUTCOME"])
 simulate_policy_change <- function(data,
                                    ruleset,
                                    modifications = list(),
@@ -52,12 +71,21 @@ simulate_policy_change <- function(data,
       next
     }
     fields_to_change <- modifications[[rule_name]]
-    for (fld in names(fields_to_change)) {
-      new_ruleset$rules[[rule_name]][[fld]] <- fields_to_change[[fld]]
+
+    if (is.null(fields_to_change)) {
+      # Remove the rule entirely
+      message(sprintf("Removing rule '%s' from the ruleset.", rule_name))
+      new_ruleset$rules[[rule_name]] <- NULL
+      new_ruleset$rule_priority <- setdiff(new_ruleset$rule_priority, rule_name)
+    } else {
+      # Modify specific fields of the rule
+      for (fld in names(fields_to_change)) {
+        new_ruleset$rules[[rule_name]][[fld]] <- fields_to_change[[fld]]
+      }
     }
   }
 
-  # Now apply the modified rules
+  # Now apply the modified ruleset
   result <- apply_rules(data, new_ruleset, outcome_col_name)
   result
 }

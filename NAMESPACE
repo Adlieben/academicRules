@@ -3,4 +3,3 @@
 export(apply_rules)
 export(define_rule_set)
 export(explain_classification)
-export(simulate_policy_change)
