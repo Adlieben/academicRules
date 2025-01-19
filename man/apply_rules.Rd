@@ -31,8 +31,8 @@ df <- data.frame(
 my_rules <- define_rule_set(
   list(
     "fail_too_many" = list(type = "threshold", value = 2, dimension = "fail_count"),
-    "min_total" = list(type = "threshold", value = 24, dimension = "total_score"),
-    "pass_essay" = list(type = "logical", expr = ~ essay_grade >= 2)
+    "min_total"     = list(type = "threshold", value = 24, dimension = "total_score"),
+    "pass_essay"    = list(type = "logical",   expr = ~ essay_grade >= 2)
   ),
   default_outcome = "PASS"
 )
