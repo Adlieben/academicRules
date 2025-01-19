@@ -2,40 +2,37 @@
 % Please edit documentation in R/apply_rules.R
 \name{apply_rules}
 \alias{apply_rules}
-\title{Apply defined academic rules to a dataset}
+\title{Apply academic rules to a data frame}
 \usage{
 apply_rules(data, ruleset, outcome_col_name = "OUTCOME")
 }
 \arguments{
-\item{data}{A data frame or tibble. Each row represents a single student's (or entity's) data.}
+\item{data}{A data frame or tibble. Each row represents a student or entity.}
 
-\item{ruleset}{An object of class "academic_ruleset" (from \code{\link{define_rule_set}}).}
+\item{ruleset}{An object of class "academic_ruleset" from \code{\link{define_rule_set}}.}
 
-\item{outcome_col_name}{Character. The name of the new column for classification result.}
+\item{outcome_col_name}{A character string for the new column's name (e.g. "OUTCOME").}
 }
 \value{
-The input data frame with an additional column containing classification outcomes.
+The original \code{data} with an extra column named \code{outcome_col_name}.
 }
 \description{
-Evaluates each row in \code{data} against the rule set defined by \code{ruleset}.
+For each row in \code{data}, evaluates the rules in \code{ruleset} in the specified priority
+order. If a rule is triggered, that row's outcome is set to "FAIL" (or equivalent).
+If no rules are triggered, the row remains at the default outcome (e.g., "PASS").
 }
 \examples{
-# Example dataset
 df <- data.frame(
-  student_id = 1:5,
-  total_score = c(26, 23, 30, 10, 29),
-  fail_count = c(0, 1, 2, 3, 1),
-  essay_grade = c(3, 2, 1, 0, 4)
+  id = 1:4,
+  score = c(60, 49, 70, 50),
+  fails = c(0, 1, 3, 2)
 )
 
-my_rules <- define_rule_set(
-  list(
-    "fail_too_many" = list(type = "threshold", value = 2, dimension = "fail_count"),
-    "min_total"     = list(type = "threshold", value = 24, dimension = "total_score"),
-    "pass_essay"    = list(type = "logical",   expr = ~ essay_grade >= 2)
-  ),
-  default_outcome = "PASS"
-)
+rs <- define_rule_set(list(
+  "min_score" = list(type = "minimum", value = 50, dimension = "score"),
+  "max_fails" = list(type = "maximum", value = 2, dimension = "fails")
+))
 
-apply_rules(df, my_rules)
+out <- apply_rules(df, rs, "RESULT")
+out
 }

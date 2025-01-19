@@ -2,7 +2,7 @@
 % Please edit documentation in R/simulate_policy_change.R
 \name{simulate_policy_change}
 \alias{simulate_policy_change}
-\title{Simulate policy changes to academic rules and compare outcomes}
+\title{Simulate a policy change by modifying one or more rules and re-evaluating}
 \usage{
 simulate_policy_change(
   data,
@@ -12,46 +12,41 @@ simulate_policy_change(
 )
 }
 \arguments{
-\item{data}{A data frame or tibble containing student data.}
+\item{data}{A data frame or tibble with student/entity data.}
 
 \item{ruleset}{An object of class "academic_ruleset".}
 
-\item{modifications}{A named list indicating which rules to modify and how,
-e.g. \code{list(min_total = list(value = 26))} to change the min_total threshold to 26.}
+\item{modifications}{A named list, where each name is a rule in \code{ruleset},
+and the value is another list specifying which fields to change. For example:
+\code{list(min_total = list(value = 26))} to change the \code{value} for
+rule \code{min_total}.}
 
-\item{outcome_col_name}{Character. Name of classification column for new outcomes.}
+\item{outcome_col_name}{The name of the new outcome column to use.}
 }
 \value{
-A data frame with both old and new outcomes or a summary of changes in pass/fail rates.
+A data frame (same as \code{data}) but with an additional
+\code{outcome_col_name} column representing the newly evaluated results.
 }
 \description{
-Temporarily adjusts rules or thresholds, applies them to the dataset, and
-compares outcomes against a baseline.
+Creates a temporary copy of the ruleset with one or more changed values
+(for example, raising a "minimum" cutoff from 24 to 26), applies it to the dataset,
+and returns the newly classified data.
 }
 \examples{
-df <- data.frame(
-  student_id = 1:5,
-  total_score = c(26, 23, 30, 10, 29),
-  fail_count = c(0, 1, 2, 3, 1),
-  essay_grade = c(3, 2, 1, 0, 4)
-)
-my_rules <- define_rule_set(
-  list(
-    "fail_too_many" = list(type = "threshold", value = 2, dimension = "fail_count"),
-    "min_total" = list(type = "threshold", value = 24, dimension = "total_score")
-  )
-)
+df <- data.frame(score=c(30,25,20,10), fails=c(0,1,3,2))
+rs <- define_rule_set(list(
+  min_score = list(type="minimum", value=24, dimension="score"),
+  max_fails = list(type="maximum", value=2, dimension="fails")
+))
 
-baseline <- apply_rules(df, my_rules, outcome_col_name = "OUTCOME_BASE")
+# Baseline
+baseline <- apply_rules(df, rs, "OUTCOME_BASE")
 
-# Increase min_total from 24 to 26
-changed <- simulate_policy_change(
-  data = df,
-  ruleset = my_rules,
-  modifications = list(min_total = list(value = 26)),
+# Raise min_score from 24 to 26
+changed <- simulate_policy_change(df, rs,
+  modifications = list(min_score = list(value=26)),
   outcome_col_name = "OUTCOME_NEW"
 )
 
-# Compare pass/fail changes
-table(baseline$OUTCOME_BASE, changed$OUTCOME_NEW)
+cbind(baseline, changed["OUTCOME_NEW"])
 }

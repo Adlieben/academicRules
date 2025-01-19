@@ -2,42 +2,36 @@
 % Please edit documentation in R/explain_classification.R
 \name{explain_classification}
 \alias{explain_classification}
-\title{Explain how each row (student) was classified according to the rules}
+\title{Explain how each row was classified according to the rules}
 \usage{
 explain_classification(data, ruleset, outcome_col_name = "OUTCOME")
 }
 \arguments{
-\item{data}{A data frame or tibble that has already been classified (i.e.,
-it has a column with final outcomes).}
+\item{data}{A data frame that was already classified by \code{\link{apply_rules}}, i.e.,
+it has a final outcome column.}
 
 \item{ruleset}{An object of class "academic_ruleset".}
 
-\item{outcome_col_name}{Character. The name of the classification column in \code{data}.}
+\item{outcome_col_name}{The name of the classification column in \code{data} (e.g. "OUTCOME").}
 }
 \value{
-A list (or data frame) detailing which rules were triggered for each row.
+A list of length \code{nrow(data)}, where each element has:
+\itemize{
+\item \code{index}: row index
+\item \code{final_classification}: the final classification (PASS or FAIL, etc.)
+\item \code{rules_evaluation}: a list of texts describing whether each rule was triggered
+}
 }
 \description{
-Shows whether each rule was triggered or not, and how the final classification
-was reached.
+For each row, indicates whether each rule triggered a fail or not, and shows the final outcome.
 }
 \examples{
-# Using the previous example:
-df <- data.frame(
-  student_id = 1:5,
-  total_score = c(26, 23, 30, 10, 29),
-  fail_count = c(0, 1, 2, 3, 1),
-  essay_grade = c(3, 2, 1, 0, 4)
-)
-my_rules <- define_rule_set(
-  list(
-    "fail_too_many" = list(type = "threshold", value = 2, dimension = "fail_count"),
-    "min_total" = list(type = "threshold", value = 24, dimension = "total_score"),
-    "pass_essay" = list(type = "logical", expr = ~ essay_grade >= 2)
-  ),
-  default_outcome = "PASS"
-)
+df <- data.frame(id=1:2, score=c(60,45), fails=c(0,3))
+rs <- define_rule_set(list(
+  min_score = list(type="minimum", value=50, dimension="score"),
+  max_fails = list(type="maximum", value=2, dimension="fails")
+))
 
-df_classified <- apply_rules(df, my_rules, outcome_col_name = "OUTCOME")
-explain_classification(df_classified, my_rules, "OUTCOME")
+out <- apply_rules(df, rs, "OUTCOME")
+explain_classification(out, rs, "OUTCOME")
 }

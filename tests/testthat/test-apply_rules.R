@@ -1,68 +1,37 @@
-test_that("apply_rules() assigns outcomes correctly for threshold rules", {
-  # Sample data
-  df <- data.frame(
-    student_id   = 1:5,
-    total_score  = c(26, 23, 30, 10, 29),
-    fail_count   = c(0, 1, 2, 3, 1)
-  )
-
-  # Define ruleset
-  rs <- define_rule_set(
-    list(
-      "min_total"    = list(type = "threshold", value = 24, dimension = "total_score"),
-      "max_fail_cnt" = list(type = "threshold", value = 2, dimension = "fail_count")
-    ),
-    default_outcome = "PASS"
-  )
-
-  # Apply rules
-  out <- apply_rules(df, rs, outcome_col_name = "OUTCOME")
-
-  expect_true("OUTCOME" %in% names(out))
-  # Check some expected outcomes
-  # Student 1: total_score = 26, fail_count=0 => PASS
-  expect_equal(out$OUTCOME[1], "PASS")
-
-  # Student 2: total_score = 23 (< 24) => should FAIL on "min_total"
-  expect_equal(out$OUTCOME[2], "FAIL")
-
-  # Student 4: total_score=10 => definitely FAIL
-  # Student 3: total_score=30, fail_count=2 => PASS
-  # Student 5: total_score=29, fail_count=1 => PASS
+test_that("apply_rules() works with minimum rules", {
+  df <- data.frame(id=1:3, score=c(60, 49, 50))
+  rs <- define_rule_set(list(
+    min_score = list(type="minimum", value=50, dimension="score")
+  ))
+  out <- apply_rules(df, rs, "OUTCOME")
+  # Fail if score<50
+  expect_equal(out$OUTCOME, c("PASS","FAIL","PASS"))
 })
 
-test_that("apply_rules() handles logical rules (formulas)", {
-  df <- data.frame(
-    student_id   = 1:3,
-    total_score  = c(25, 15, 27),
-    essay_grade  = c(3, 1, 2)
-  )
-
-  # Define ruleset with a logical rule
-  rs <- define_rule_set(
-    list(
-      "min_total" = list(type = "threshold", value = 24, dimension = "total_score"),
-      "pass_essay" = list(type = "logical", expr = ~ essay_grade >= 2)
-    ),
-    default_outcome = "PASS"
-  )
-
-  out <- apply_rules(df, rs, outcome_col_name = "OUTCOME")
-
-  # Student 2 fails essay rule
-  expect_equal(out$OUTCOME[2], "FAIL")
-  # Students 1 and 3 pass everything
-  expect_equal(out$OUTCOME[c(1,3)], c("PASS", "PASS"))
+test_that("apply_rules() works with maximum rules", {
+  df <- data.frame(id=1:3, fails=c(1, 2, 3))
+  rs <- define_rule_set(list(
+    max_fails = list(type="maximum", value=2, dimension="fails")
+  ))
+  out <- apply_rules(df, rs, "OUTCOME")
+  # Fail if fails>2
+  expect_equal(out$OUTCOME, c("PASS","PASS","FAIL"))
 })
 
-test_that("apply_rules() errors on non-existent column in threshold rule", {
-  df <- data.frame(x = 1:3)
-  rs <- define_rule_set(
-    list("fake_rule" = list(type="threshold", value=2, dimension="bad_col"))
-  )
+test_that("apply_rules() works with logical rules", {
+  df <- data.frame(id=1:3, x=c(10, -1, 5))
+  rs <- define_rule_set(list(
+    must_be_positive = list(type="logical", expr=~ x>0)
+  ))
+  out <- apply_rules(df, rs, "OUTCOME")
+  expect_equal(out$OUTCOME, c("PASS","FAIL","PASS"))
+})
 
-  expect_error(
-    apply_rules(df, rs),
-    "Column bad_col not found in data."
-  )
+test_that("apply_rules() errors on missing column for min/max rule", {
+  df <- data.frame(foo=1:3)
+  rs <- define_rule_set(list(
+    min_bar = list(type="minimum", value=10, dimension="bar")
+  ))
+  expect_error(apply_rules(df, rs),
+               "Column 'bar' not found in data for rule 'min_bar'.")
 })
